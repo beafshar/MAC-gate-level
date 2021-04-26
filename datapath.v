@@ -55,6 +55,23 @@ module reg8bit(input clk, rst, en, input[7:0] in, output reg [7:0] out);
 			out <= in;
 	end
 endmodule
+//?????????? 8 bite?
+module reg16bit(input clk, rst, ldu, ldd, ld, input[7:0] in, output reg [15:0] out);
+	initial begin
+		out <= 0;
+	end
+
+	always@ (posedge clk, posedge rst) begin
+		if(rst)
+			out <= 0;
+		else if(ldu)
+			out <= in[15:8];
+		else if (ldd)
+			out <= in[7:0];
+		else if (ld)
+			out <= in;
+	end
+endmodule
 
 // --------------------- multiplexers --------------------- 
 
@@ -134,7 +151,7 @@ endmodule
 
 // --------------------- 4*4 multiplier --------------------- 
 
-module mult4bit (input [3:0] a, b, sela, selb, rst, clk, ld, selo, output [7:0] out);
+module mult4bitDP (input [3:0] a, b, sela, selb, rst, clk, ld, selo, output [7:0] out);
 	reg [3:0] a_out, b_out, a_mux_out, b_mux_out, mult_out;
 	reg [7:0] se_out, mux2_out, add_out;
 	reg cout;
@@ -158,3 +175,66 @@ module mult4bit (input [3:0] a, b, sela, selb, rst, clk, ld, selo, output [7:0] 
 
 
 endmodule
+
+module mult4bitCU ();
+
+endmodule
+
+module mult4bit ();
+
+endmodule
+
+// --------------------- 2's complement --------------------- 
+module twosComplement(input [7:0] in, output[7:0] out);
+	wire[7:0] first_complement;
+	wire cout;
+	
+	genvar i;
+	generate for (i = 1; i < 7; i = i + 1) begin: inverter
+		not(first_complement[i], in[i]);
+	end
+	endgenerate
+	
+	adder8bit adder(first_complement, 8'b 00000001,out, cout);
+endmodule
+
+// --------------------- Complex multiplier --------------------- 
+
+module complexmult4to4DP(input[7:0] a, b, input sela, selb, sel2,rst, clk, ld, ldout, ldu, ldd, ldall,
+		output[16:0] out);
+	wire [7:0] a_out, b_out, mult_out, twos_out, mux_out, add_out;
+	wire [3:0] mux_aout, mux_bout;
+	wire cout;
+	reg8bit areg(clk, rst, ld, a, a_out);
+	reg8bit breg(clk, rst, ld, b, b_out);
+
+	mux4bit2to1 amux(a_out[7:4], a_out[3:0], sela, mux_aout);
+	mux4bit2to1 bmux(b_out[7:4], b_out[3:0], selb, mux_bout);
+	
+	// not completed
+	mult4bit mul4to4();
+
+	twosComplement twosc(mult_out, twos_out);
+
+	mux8bit2to1 mux8bit(mult_out, twos_out, sel2, mux_out);
+	
+	adder8bit adder(mux_out, temp_out, add_out, cout);
+
+	reg8bit reg_out(clk, rst, ld_out, add_out, temp_out);
+
+	reg16bit reg_out16(clk, rst, ldu, ldd, ldall, temp_out,  out);
+
+
+
+endmodule
+
+module complexmult4to4CU();
+
+endmodule
+
+module complexmult4to4();
+
+endmodule
+
+
+// --------------------- MAC --------------------- 
