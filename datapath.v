@@ -55,8 +55,8 @@ module reg8bit(input clk, rst, en, input[7:0] in, output reg [7:0] out);
 			out <= in;
 	end
 endmodule
-//?????????? 8 bite?
-module reg16bit(input clk, rst, ldu, ldd, ld, input[7:0] in, output reg [15:0] out);
+
+module reg16bit(input clk, rst, ldu, ldd, input[7:0] in, output reg [15:0] out);
 	initial begin
 		out <= 0;
 	end
@@ -65,11 +65,10 @@ module reg16bit(input clk, rst, ldu, ldd, ld, input[7:0] in, output reg [15:0] o
 		if(rst)
 			out <= 0;
 		else if(ldu)
-			out <= in[15:8];
+			out[15:8] <= in;
 		else if (ldd)
-			out <= in[7:0];
-		else if (ld)
-			out <= in;
+			out[7:0] <= in;
+		
 	end
 endmodule
 
@@ -122,6 +121,17 @@ module SE4to8bit(input[3:0]in , output[7:0] out);
 	endgenerate
 endmodule
 
+module SE16bit(input [15:0] in,output[19:0] out);
+
+  assign out = {2'b 00,in, 2'b 00};
+  
+endmodule
+
+// --------------------- shifter --------------------- 
+  
+module shiftL2 (input[7:0] in ,output[7:0] out);
+  assign out = {in[5:0],2'b00};
+endmodule
 
 // --------------------- adders --------------------- 
 
@@ -153,9 +163,9 @@ endmodule
 
 module mult4bitDP (input [3:0] a, b, sela, selb, rst, clk, ld, selo, output [7:0] out);
 	reg [3:0] a_out, b_out, a_mux_out, b_mux_out, mult_out;
-	reg [7:0] se_out, mux2_out, add_out;
+	reg [7:0] se_out, mux2_out, add_out, shift_out;
 	reg cout;
-	// ld a bahaman?
+	
 	reg4bit areg(clk, rst, ld, a, a_out);
 	reg4bit breg(clk, rst, ld, a, a_out);
 
@@ -170,17 +180,38 @@ module mult4bitDP (input [3:0] a, b, sela, selb, rst, clk, ld, selo, output [7:0
 
 
 	reg8bit outreg(clk, rst, ld, add_out, out);
-	// in shifteresho nazadam
-	mux8bit2to1 mux2(out, {2'b0, out[7:1]}, sel_o, mux2_out);
+	//shift left ya right?
+	shiftL2 shifter(out ,shift_out);
+	mux8bit2to1 mux2(out, shift_out, sel_o, mux2_out);
 
 
 endmodule
 
-module mult4bitCU ();
-
+module mult4bitCU (input clk, start, output reg ready, rst, ld, sela, selb, selo);
+	reg[2:0] ns, ps;
+	
+	always @(ps, start)begin
+		ns = 3'b 000;
+		{rst, ld, sela, selb, selo, ready} = 6'b 000000;
+		case(ps)
+			3'b 000: begin ns = start? 3'b 001: 3'b 000; ready = 1'b 1; end
+			3'b 001: begin ns = 3'b 010; rst = 1'b 1; end
+			3'b 010: begin ns = 3'b 011; ld = 1'b 1; end
+			3'b 011: begin ns = 3'b 100; {sela, selb, selo} = 3'b 111; end
+			3'b 100: begin ns = 3'b 101; {sela, selb, selo} = 3'b 100; end
+			3'b 101: begin ns = 3'b 110; {sela, selb, selo} = 3'b 011; end
+			3'b 110: begin ns = 3'b 000; {sela, selb, selo} = 3'b 000; end
+		endcase
+	end
+	always @(posedge clk) begin
+		ps <= ns;
+	end
 endmodule
 
-module mult4bit ();
+module mult4bit(input clk, start, input [3:0] a, b, output ready, output [7:0] out);
+	wire sela, selb, rst, ld, selo;
+	mult4bitDP dp(a, b, sela, selb, rst, clk, ld, selo, out);
+	mult4bitCU cu(clk, start, ready, rst, ld, sela, selb, selo);
 
 endmodule
 
@@ -200,7 +231,7 @@ endmodule
 
 // --------------------- Complex multiplier --------------------- 
 
-module complexmult4to4DP(input[7:0] a, b, input sela, selb, sel2,rst, clk, ld, ldout, ldu, ldd, ldall,
+module complexmult4to4DP(input[7:0] a, b, input sela, selb, sel2,rst, clk, ld, ldout, ldu, ldd,
 		output[16:0] out);
 	wire [7:0] a_out, b_out, mult_out, twos_out, mux_out, add_out;
 	wire [3:0] mux_aout, mux_bout;
@@ -208,33 +239,67 @@ module complexmult4to4DP(input[7:0] a, b, input sela, selb, sel2,rst, clk, ld, l
 	reg8bit areg(clk, rst, ld, a, a_out);
 	reg8bit breg(clk, rst, ld, b, b_out);
 
-	mux4bit2to1 amux(a_out[7:4], a_out[3:0], sela, mux_aout);
-	mux4bit2to1 bmux(b_out[7:4], b_out[3:0], selb, mux_bout);
+	mux4bit2to1 amux(a_out[3:0], a_out[7:4], sela, mux_aout);
+	mux4bit2to1 bmux(b_out[3:0], b_out[7:4], selb, mux_bout);
 	
 	// not completed
 	mult4bit mul4to4();
 
 	twosComplement twosc(mult_out, twos_out);
 
-	mux8bit2to1 mux8bit(mult_out, twos_out, sel2, mux_out);
+	mux8bit2to1 mux8bit(twos_out, mult_out, sel2, mux_out);
 	
 	adder8bit adder(mux_out, temp_out, add_out, cout);
 
 	reg8bit reg_out(clk, rst, ld_out, add_out, temp_out);
 
-	reg16bit reg_out16(clk, rst, ldu, ldd, ldall, temp_out,  out);
+	reg16bit reg_out16(clk, rst, ldu, ldd, temp_out,  out);
 
 
 
 endmodule
 
-module complexmult4to4CU();
+module complexmult4to4CU(input start, clk, output reg sela, selb, sel2,rst, ld, ldout, ldu, ldd, ready);
+	reg[2:0] ns, ps;
+	
+	always @(ps, start)begin
+		ns = 3'b 000;
+		{sela, selb, sel2,rst, ld, ldout, ldu, ldd, ready} = 9'b 000000000;
+		case(ps)
+			3'b 000: begin ns = start? 3'b 001: 3'b 000; ready = 1'b 1; end
+			3'b 001: begin ns = 3'b 010; rst = 1'b 1; end
+			3'b 010: begin ns = 3'b 011; ld = 1'b 1; end
+			3'b 011: begin ns = 3'b 100; {sela, selb, sel2, ldout} = 4'b 1101; end
+			3'b 100: begin ns = 3'b 101; {sela, selb, sel2, ldout} = 4'b 0011; end
+			3'b 101: begin ns = 3'b 110; {sela, selb, sel2, ldu, ldout} = 5'b 10011; end
+			3'b 110: begin ns = 3'b 111; {sela, selb, sel2, ldout} = 4'b 0101; end
+			3'b 111: begin ns = 3'b 000; ldd = 1'b 1; end
+		endcase
+	end
+	always @(posedge clk) begin
+		ps <= ns;
+	end
 
 endmodule
 
-module complexmult4to4();
+module complexmult4to4(input clk, start, input[7:0] a, b, output reg ready, output[16:0] out);
+	wire sela, selb, sel2,rst, ld, ldout, ldu, ldd;
+	complexmult4to4DP dp(a, b,sela, selb, sel2,rst, clk, ld, ldout, ldu, ldd, out);
+	complexmult4to4CU cu(start, clk,sela, selb, sel2,rst, ld, ldout, ldu, ldd, ready);
 
 endmodule
 
 
 // --------------------- MAC --------------------- 
+
+module MACdp();
+
+endmodule
+
+module MACcu();
+
+endmodule
+
+module MAC();
+
+endmodule
